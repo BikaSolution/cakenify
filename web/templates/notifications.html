@@ -1,0 +1,28 @@
+{{define "content"}}
+<h1>Notification settings</h1>
+{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+{{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
+
+<div class="card">
+  <h2>ntfy</h2>
+  <p class="muted">Sends your birthday reminders to an <a href="https://ntfy.sh" target="_blank" rel="noopener">ntfy</a> topic. Enter the topic (and access token, if it's a private topic) you want reminders published to.</p>
+  <form method="post" action="/settings/notifications">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <input type="hidden" name="strategy" value="ntfy">
+    <label>Topic
+      <input type="text" name="topic" value="{{.Data.NtfyTopic}}" placeholder="e.g. birthday_nw" required>
+    </label>
+    <label>Access token <span class="muted">({{if .Data.NtfyHasToken}}already saved, leave blank to keep it{{else}}optional{{end}})</span>
+      <input type="password" name="token" autocomplete="off" placeholder="{{if .Data.NtfyHasToken}}••••••••{{end}}">
+    </label>
+    <label class="checkbox-row">
+      <input type="checkbox" name="enabled" {{if .Data.NtfyEnabled}}checked{{end}}>
+      Enabled
+    </label>
+    <div class="field-row">
+      <button type="submit">Save</button>
+      <button type="submit" formaction="/settings/notifications/test" class="secondary">Send test notification</button>
+    </div>
+  </form>
+</div>
+{{end}}

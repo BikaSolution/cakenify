@@ -1,0 +1,17 @@
+{{define "content"}}
+<div class="login-wrap">
+  <div class="card">
+    <h1>Cakenify</h1>
+    {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+    <form method="post" action="/login">
+      <label>Username
+        <input type="text" name="username" required autofocus>
+      </label>
+      <label>Password
+        <input type="password" name="password" required>
+      </label>
+      <button type="submit">Log in</button>
+    </form>
+  </div>
+</div>
+{{end}}

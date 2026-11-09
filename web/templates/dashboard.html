@@ -1,0 +1,15 @@
+{{define "content"}}
+<h1>Your birthdays</h1>
+
+<div class="card">
+  <h2>Add a birthday</h2>
+  {{template "birthday_form" .Data.Form}}
+</div>
+
+<div class="card">
+  <h2>Upcoming</h2>
+  <div id="birthdays-list">
+    {{template "birthdays_list" .Data.List}}
+  </div>
+</div>
+{{end}}

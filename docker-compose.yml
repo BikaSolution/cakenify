@@ -1,0 +1,75 @@
+services:
+  postgres:
+    image: postgres:16.15-alpine3.24@sha256:aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139
+    container_name: cakenify-postgres
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # The entrypoint starts as root only to fix data-dir ownership, then
+    # drops to the postgres user — these are the only caps it needs for that.
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    environment:
+      POSTGRES_USER: cakenify
+      # No default: refuse to start rather than fall back to a guessable password.
+      POSTGRES_PASSWORD: ${CAKENIFY_DB_PASSWORD:?set CAKENIFY_DB_PASSWORD in .env}
+      POSTGRES_DB: cakenify
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cakenify"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    container_name: cakenify-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      CAKENIFY_PORT: "8080"
+      CAKENIFY_DB_HOST: postgres
+      CAKENIFY_DB_PORT: "5432"
+      CAKENIFY_DB_USER: cakenify
+      CAKENIFY_DB_PASSWORD: ${CAKENIFY_DB_PASSWORD:?set CAKENIFY_DB_PASSWORD in .env}
+      CAKENIFY_DB_NAME: cakenify
+      CAKENIFY_DB_SSLMODE: disable
+      CAKENIFY_NTFY_BASE_URL: ${CAKENIFY_NTFY_BASE_URL:-https://ntfy.bikasolutions.co.za}
+      CAKENIFY_TIMEZONE: ${CAKENIFY_TIMEZONE:-Africa/Johannesburg}
+      CAKENIFY_SESSION_TTL: ${CAKENIFY_SESSION_TTL:-720h}
+      CAKENIFY_SECURE_COOKIES: ${CAKENIFY_SECURE_COOKIES:-true}
+      CAKENIFY_ADMIN_USERNAME: ${CAKENIFY_ADMIN_USERNAME:-}
+      CAKENIFY_ADMIN_PASSWORD: ${CAKENIFY_ADMIN_PASSWORD:-}
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.10.7@sha256:4955524aeaa379e154023d5a027c250f7b35041a2e7e950cf13f144bc9b9c5ba
+    container_name: cakenify-cloudflared
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # Token via env, not argv, so it doesn't show up in the host's `ps`.
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN in .env}
+    depends_on:
+      - app

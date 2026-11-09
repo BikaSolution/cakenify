@@ -1,0 +1,28 @@
+# Keep the build context minimal. The Dockerfile only COPYs cmd/ internal/
+# pkg/ web/, but anything not excluded here is still sent to the daemon.
+# NOTE: no "!" re-include patterns — they force Docker to walk into excluded
+# dirs (pgdata/ is uid 70, mode 700, and unreadable to the build).
+.git
+.github
+.gitignore
+.dockerignore
+pgdata
+bin
+.env
+.env.*
+*.env
+*.pem
+*.key
+*.crt
+*.p12
+*.db
+*.sqlite*
+*.log
+*.md
+LICENSE
+Dockerfile
+docker-compose*.yml
+.vscode
+.idea
+.claude
+.agents

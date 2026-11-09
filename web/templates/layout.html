@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} · Cakenify</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/htmx.min.js"></script>
+  <script src="/static/app.js"></script>
+</head>
+<body{{if .User}} hx-headers='{"X-CSRF-Token":"{{.CSRFToken}}"}'{{end}}>
+  {{if .User}}
+  <nav class="topbar">
+    <a class="brand" href="/">Cakenify</a>
+    <div class="links">
+      <a href="/">Dashboard</a>
+      <a href="/settings/notifications">Notifications</a>
+      {{if .User.IsAdmin}}<a href="/admin/users">Admin<span class="badge">admin</span></a>{{end}}
+      <span class="muted">{{.User.Username}}</span>
+      <form method="post" action="/logout" class="inline-form">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <button type="submit" class="secondary">Log out</button>
+      </form>
+    </div>
+  </nav>
+  {{end}}
+  <main>
+    {{template "content" .}}
+  </main>
+</body>
+</html>

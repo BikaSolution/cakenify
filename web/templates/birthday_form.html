@@ -1,0 +1,29 @@
+{{define "birthday_form"}}
+<div class="list-item birthday-form">
+  <form class="inline"
+        {{if .Birthday}}hx-put="/birthdays/{{.Birthday.ID}}"{{else}}hx-post="/birthdays" id="add-birthday-form"{{end}}
+        hx-target="#birthdays-list" hx-swap="innerHTML">
+    <label>Name
+      <input type="text" name="person_name" value="{{if .Birthday}}{{.Birthday.PersonName}}{{end}}" required>
+    </label>
+    <label>Month
+      <select name="birth_month">
+        {{range .Months}}<option value="{{.Value}}" {{if .Selected}}selected{{end}}>{{.Name}}</option>{{end}}
+      </select>
+    </label>
+    <label>Day
+      <input type="number" name="birth_day" min="1" max="31" value="{{if .Birthday}}{{.Birthday.Day}}{{end}}" required>
+    </label>
+    <label>Year <span class="muted">(optional)</span>
+      <input type="number" name="birth_year" min="1900" max="2100" value="{{if and .Birthday .Birthday.Year}}{{.Birthday.Year}}{{end}}">
+    </label>
+    <label>Notes <span class="muted">(optional)</span>
+      <input type="text" name="notes" value="{{if .Birthday}}{{.Birthday.Notes}}{{end}}">
+    </label>
+    <button type="submit">{{if .Birthday}}Save{{else}}Add{{end}}</button>
+    {{if .Birthday}}
+    <button type="button" class="secondary" hx-get="/birthdays" hx-target="#birthdays-list" hx-swap="innerHTML">Cancel</button>
+    {{end}}
+  </form>
+</div>
+{{end}}

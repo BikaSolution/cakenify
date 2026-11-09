@@ -1,0 +1,33 @@
+{{define "content"}}
+<h1>Users</h1>
+{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+
+<div class="card">
+  <h2>Add a user</h2>
+  <form class="inline" method="post" action="/admin/users">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <label>Username
+      <input type="text" name="username" required autocomplete="off">
+    </label>
+    <label>Password
+      <input type="password" name="password" required minlength="8" autocomplete="new-password">
+    </label>
+    <label class="checkbox-row">
+      <input type="checkbox" name="is_admin">
+      Admin
+    </label>
+    <button type="submit">Create</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>All users</h2>
+  <ul class="list">
+    {{range .Data.Users}}
+    <li class="list-item">
+      <div class="name">{{.Username}}{{if .IsAdmin}}<span class="badge">admin</span>{{end}}</div>
+    </li>
+    {{end}}
+  </ul>
+</div>
+{{end}}

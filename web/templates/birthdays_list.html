@@ -1,0 +1,20 @@
+{{define "birthdays_list"}}
+{{if not .Birthdays}}
+<p class="empty">No birthdays yet — add one above.</p>
+{{else}}
+<ul class="list">
+  {{range .Birthdays}}
+  <li class="list-item">
+    <div>
+      <div class="name">{{.PersonName}}</div>
+      <div class="meta">{{.MonthName}} {{.Day}}{{if .TurningAge}} &middot; turning {{.TurningAge}}{{end}}{{if .Notes}} &middot; {{.Notes}}{{end}}</div>
+    </div>
+    <div class="actions">
+      <button type="button" class="secondary" hx-get="/birthdays/{{.ID}}/edit" hx-target="closest .list-item" hx-swap="outerHTML">Edit</button>
+      <button type="button" class="danger" hx-delete="/birthdays/{{.ID}}" hx-target="#birthdays-list" hx-swap="innerHTML" hx-confirm="Delete {{.PersonName}}'s birthday?">Delete</button>
+    </div>
+  </li>
+  {{end}}
+</ul>
+{{end}}
+{{end}}
