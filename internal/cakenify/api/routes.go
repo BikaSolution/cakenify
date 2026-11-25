@@ -61,6 +61,11 @@ func (s *Server) routes() {
 	}
 	s.mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(staticFS)))
 
+	// Liveness probe for the container HEALTHCHECK (cakenify -healthcheck).
+	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("ok"))
+	})
+
 	s.mux.HandleFunc("GET /login", s.handleLoginPage)
 	s.mux.HandleFunc("POST /login", s.handleLogin)
 	s.mux.HandleFunc("POST /logout", s.requireAuth(s.handleLogout))

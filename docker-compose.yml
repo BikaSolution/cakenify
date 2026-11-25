@@ -1,56 +1,81 @@
+# Cakenify: app + Postgres, published only through a Cloudflare Tunnel.
+#
+# Never add "ports:". The app trusts CF-Connecting-IP (login rate limiting)
+# because the only thing that can reach it is cloudflared over the "edge"
+# network; a published port would let anyone who can reach it forge that
+# header. For local debugging, see "Reaching the app locally" in README.md.
+#
+# Networks:
+#   db     internal (no internet): app <-> postgres. cloudflared can't reach
+#          the database even if the tunnel is misconfigured or compromised.
+#   edge   cloudflared <-> app, plus internet egress — cloudflared needs it to
+#          dial Cloudflare, the app needs it to publish to ntfy.
+
+x-hardening: &hardening
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
 services:
   postgres:
+    <<: *hardening
     image: postgres:19.0-alpine3.24@sha256:8b0ff4cdf221f0c53d7fcda681d3b461be725c492cd881c5ec9c0ad25023f188
     container_name: cakenify-postgres
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-    # The entrypoint starts as root only to fix data-dir ownership, then
-    # drops to the postgres user — these are the only caps it needs for that.
-    cap_drop:
-      - ALL
-    cap_add:
-      - CHOWN
-      - DAC_OVERRIDE
-      - FOWNER
-      - SETGID
-      - SETUID
+    # Run as the image's postgres user (uid 70) from the start, so the
+    # entrypoint never needs root, chown or gosu — hence no cap_add at all.
+    user: "70:70"
+    mem_limit: 512m
+    pids_limit: 256
+    cpus: 1.0
     environment:
       POSTGRES_USER: cakenify
       # No default: refuse to start rather than fall back to a guessable password.
       POSTGRES_PASSWORD: ${CAKENIFY_DB_PASSWORD:?set CAKENIFY_DB_PASSWORD in .env}
       POSTGRES_DB: cakenify
     volumes:
-      - ./pgdata:/var/lib/postgresql/data
+      # Postgres 18+ images keep data in /var/lib/postgresql/<major>/docker,
+      # so the volume goes on the parent. That layout lets a future major
+      # upgrade run pg_upgrade with the old and new clusters side by side.
+      - pgdata:/var/lib/postgresql
+    tmpfs:
+      - /var/run/postgresql:uid=70,gid=70,mode=0700
+      - /tmp:uid=70,gid=70,mode=0700
+    networks: [db]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cakenify"]
+      test: ["CMD", "pg_isready", "-U", "cakenify", "-d", "cakenify"]
       interval: 5s
       timeout: 5s
       retries: 10
+      start_period: 30s
 
   app:
+    <<: *hardening
     build: .
     container_name: cakenify-app
-    restart: unless-stopped
+    mem_limit: 256m
+    pids_limit: 128
+    cpus: 1.0
     depends_on:
       postgres:
         condition: service_healthy
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    read_only: true
     tmpfs:
       - /tmp
-    ports:
-      - "127.0.0.1:8080:8080"
     environment:
+      GOMEMLIMIT: 200MiB
       CAKENIFY_PORT: "8080"
       CAKENIFY_DB_HOST: postgres
       CAKENIFY_DB_PORT: "5432"
       CAKENIFY_DB_USER: cakenify
       CAKENIFY_DB_PASSWORD: ${CAKENIFY_DB_PASSWORD:?set CAKENIFY_DB_PASSWORD in .env}
       CAKENIFY_DB_NAME: cakenify
+      # Plaintext is acceptable only because "db" is an internal network
+      # that nothing but the app and postgres can join.
       CAKENIFY_DB_SSLMODE: disable
       CAKENIFY_NTFY_BASE_URL: ${CAKENIFY_NTFY_BASE_URL:-https://ntfy.bikasolutions.co.za}
       CAKENIFY_TIMEZONE: ${CAKENIFY_TIMEZONE:-Africa/Johannesburg}
@@ -58,18 +83,47 @@ services:
       CAKENIFY_SECURE_COOKIES: ${CAKENIFY_SECURE_COOKIES:-true}
       CAKENIFY_ADMIN_USERNAME: ${CAKENIFY_ADMIN_USERNAME:-}
       CAKENIFY_ADMIN_PASSWORD: ${CAKENIFY_ADMIN_PASSWORD:-}
+    networks: [db, edge]
+    # Distroless image (no shell, no curl): the binary probes its own /healthz.
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/cakenify", "-healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
   cloudflared:
+    <<: *hardening
     image: cloudflare/cloudflared:2026.11.1@sha256:e613aadbc2d9511785d2e67a86b0c8ac18dd63a3f9af0d06faf04cbfdcb35f2d
     container_name: cakenify-cloudflared
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    # Token via env, not argv, so it doesn't show up in the host's `ps`.
+    mem_limit: 256m
+    pids_limit: 128
+    cpus: 1.0
+    # Token via env, not argv, so it doesn't show up in `ps` or `docker inspect` Cmd.
     command: tunnel --no-autoupdate run
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN in .env}
+      # Metrics/readiness on loopback only (default listens on all
+      # interfaces, i.e. reachable by the app container).
+      TUNNEL_METRICS: 127.0.0.1:20241
+    networks: [edge]
+    healthcheck:
+      test: ["CMD", "cloudflared", "tunnel", "--metrics", "127.0.0.1:20241", "ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     depends_on:
-      - app
+      app:
+        condition: service_healthy
+
+networks:
+  db:
+    internal: true
+  edge: {}
+
+volumes:
+  # Not the old "cakenify-pgdata" volume (stale Postgres 16 data from August)
+  # and not the old ./pgdata bind mount (Postgres 16). Data was migrated into
+  # this volume with pg_dump/pg_restore — see "Postgres upgrades" in README.md.
+  pgdata:

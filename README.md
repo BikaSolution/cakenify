@@ -59,19 +59,51 @@ cp .env.example .env        # then fill in real values — .env is git-ignored
 docker compose up -d --build
 ```
 
-The app listens on `127.0.0.1:8080` on the host. Public traffic is expected to
-arrive through the `cloudflared` service; point your Cloudflare Tunnel's
-public hostname at `http://app:8080`.
+No ports are published on the host. Public traffic arrives only through the
+`cloudflared` service; point your Cloudflare Tunnel's public hostname at
+`http://app:8080`. The app trusts `CF-Connecting-IP` for login rate limiting,
+which is only safe because nothing but `cloudflared` can reach it, so don't
+add `ports:` to `docker-compose.yml`.
+
+Every container runs as a non-root user with a read-only root filesystem, no
+Linux capabilities, `no-new-privileges`, and memory/CPU/process limits.
+Postgres sits on an internal network: it has no internet access and is
+reachable only by the app.
 
 On first boot with an empty `users` table, an admin account is created from
 `CAKENIFY_ADMIN_USERNAME` / `CAKENIFY_ADMIN_PASSWORD`. Once any user exists
 these are ignored, so you can clear them from `.env` afterwards.
 
-> **Build note:** Postgres data is bind-mounted at `./pgdata`, which is owned
-> by the container's postgres user and unreadable to you. Docker's legacy
-> builder fails on unreadable directories in the build context even when
-> they're in `.dockerignore`, so build with BuildKit (install the
-> `docker-buildx` plugin).
+#### Reaching the app locally
+
+To hit the app without going through the tunnel, run a throwaway client on
+its network instead of publishing a port:
+
+```sh
+docker run --rm --network cakenify_edge curlimages/curl:8.17.0 -s http://app:8080/healthz
+```
+
+#### Backups and Postgres upgrades
+
+Postgres data lives in the `cakenify_pgdata` named volume, outside the source
+tree. Take a logical backup with:
+
+```sh
+docker compose exec -T postgres pg_dump -U cakenify -d cakenify -Fc > cakenify-$(date +%F).dump
+```
+
+A new Postgres **major** version (e.g. 19 → 20) can't open the old version's
+data files, so don't merge that Dependabot PR on its own. Dump with the old
+version, merge the bump, then restore into an empty volume:
+
+```sh
+docker compose down
+docker volume rm cakenify_pgdata        # only once the dump is verified!
+docker compose up -d postgres
+docker compose exec -T postgres pg_restore -U cakenify -d cakenify \
+  --exit-on-error --single-transaction < cakenify-YYYY-MM-DD.dump
+docker compose up -d
+```
 
 ### Locally
 
