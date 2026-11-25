@@ -24,6 +24,11 @@ import (
 )
 
 func main() {
+	// Container HEALTHCHECK mode: probe the running server and exit.
+	if len(os.Args) == 2 && os.Args[1] == "-healthcheck" {
+		os.Exit(healthcheck(":" + envOr("CAKENIFY_PORT", "8080")))
+	}
+
 	ctx := context.Background()
 	cfg := loadConfig()
 
